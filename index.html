@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web Flashlight Control By Kervs</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            touch-action: manipulation; /* Prevents double-tap zoom on mobile */
+        }
+        .status-light {
+            transition: background-color 0.3s ease;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 flex items-center justify-center min-h-screen text-white">
+
+    <div class="max-w-sm w-full mx-auto p-8 bg-gray-800 rounded-3xl shadow-2xl text-center">
+        <h1 class="text-3xl font-bold mb-2 text-cyan-400">Flashlight Control By Kervs</h1>
+        <p class="text-gray-400 mb-6">Use the buttons below to toggle your device's torch.</p>
+
+        <!-- Status Indicator -->
+        <div class="flex justify-center items-center mb-8">
+            <div id="status-light" class="w-8 h-8 rounded-full bg-red-500 border-4 border-gray-700 status-light"></div>
+            <span id="status-text" class="ml-4 text-lg font-medium text-gray-300">Off</span>
+        </div>
+
+        <!-- Control Buttons -->
+        <div class="grid grid-cols-1 gap-4">
+            <button id="toggleButton" class="bg-cyan-500 hover:bg-cyan-600 active:bg-cyan-700 text-white font-bold py-4 px-6 rounded-xl text-lg shadow-lg transform transition-transform duration-150 ease-in-out active:scale-95 focus:outline-none focus:ring-4 focus:ring-cyan-300">
+                Turn On
+            </button>
+        </div>
+
+        <!-- Info/Error Message Box -->
+        <div id="messageBox" class="mt-6 p-4 bg-yellow-900/50 text-yellow-300 border border-yellow-700 rounded-lg text-sm hidden">
+            This feature is experimental and may not work on your browser or device. You must grant camera permission.
+        </div>
+    </div>
+
+    <script>
+        // --- DOM Element References ---
+        const toggleButton = document.getElementById('toggleButton');
+        const messageBox = document.getElementById('messageBox');
+        const statusLight = document.getElementById('status-light');
+        const statusText = document.getElementById('status-text');
+
+        // --- State Management ---
+        let isFlashlightOn = false;
+        let mediaStream = null;
+        let track = null;
+
+        // Check for browser support on page load
+        if (!('mediaDevices' in navigator && 'getUserMedia' in navigator.mediaDevices)) {
+            showMessage('Your browser does not support the necessary features.');
+            toggleButton.disabled = true;
+            toggleButton.classList.add('opacity-50', 'cursor-not-allowed');
+        }
+
+        // --- Core Flashlight Logic ---
+        async function toggleFlashlight() {
+            if (isFlashlightOn) {
+                // Turn the flashlight OFF
+                if (track) {
+                    track.stop(); // Release the camera track
+                }
+                if (mediaStream) {
+                    mediaStream.getTracks().forEach(t => t.stop());
+                }
+                isFlashlightOn = false;
+                mediaStream = null;
+                track = null;
+                updateUI();
+            } else {
+                // Turn the flashlight ON
+                try {
+                    // Request access to the camera
+                    // We need a video stream to access the torch functionality
+                    mediaStream = await navigator.mediaDevices.getUserMedia({
+                        video: {
+                            // Request the rear camera
+                            facingMode: 'environment'
+                        }
+                    });
+
+                    track = mediaStream.getVideoTracks()[0];
+
+                    // Apply the torch constraint to turn on the light
+                    await track.applyConstraints({
+                        advanced: [{ torch: true }]
+                    });
+
+                    isFlashlightOn = true;
+                    updateUI();
+
+                } catch (err) {
+                    console.error("Error accessing flashlight:", err);
+                    let userMessage = 'Could not access the flashlight. ';
+                    if (err.name === 'NotAllowedError') {
+                        userMessage += 'Please grant camera permission.';
+                    } else if (err.name === 'NotFoundError' || err.name === 'OverconstrainedError') {
+                        userMessage += 'No rear camera with a flashlight found.';
+                    } else {
+                        userMessage += 'An unknown error occurred.';
+                    }
+                    showMessage(userMessage);
+                    // Clean up if something went wrong
+                    if (track) track.stop();
+                    isFlashlightOn 
